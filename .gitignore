@@ -33,3 +33,5 @@ Thumbs.db
 
 # Raw evidence that may contain sensitive identifiers
 evidence/raw/
+
+tfplan
