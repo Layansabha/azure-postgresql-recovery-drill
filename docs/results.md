@@ -49,3 +49,38 @@ The observed recovery duration is a measurement from one controlled lab run, not
 The selected recovery point was 16.70 minutes before the incident. This is a deliberately chosen recovery-point gap for the experiment and is not a guaranteed RPO.
 
 The test does not demonstrate multi-region disaster recovery, production scale, enterprise high availability, or guaranteed recovery objectives.
+
+## Cleanup verification
+
+After recovery evidence was collected, the temporary Azure resources were removed.
+
+Verified cleanup results:
+
+- PITR-restored PostgreSQL Flexible Server deleted.
+- Restored server lookup returned `ResourceNotFound`.
+- Terraform destroy plan showed:
+  - 0 to add
+  - 0 to change
+  - 5 to destroy
+- Terraform state after cleanup was empty.
+- Resource Group existence check returned `false`.
+- Azure PostgreSQL Flexible Server list returned no remaining servers in the subscription.
+
+The lab therefore did not leave the source or restored PostgreSQL servers running after completion.
+
+## Final project status
+
+The tested recovery drill completed the full intended workflow:
+
+Known data
+-> controlled destructive event
+-> verified data loss
+-> Azure Point-in-Time Restore
+-> restored-server network recovery
+-> programmatic recovery validation
+-> measured recovery
+-> Azure resource cleanup
+
+Observed end-to-end recovery duration for this lab run: 14.08 minutes.
+
+This remains an observed lab measurement, not a guaranteed RTO or RPO.
