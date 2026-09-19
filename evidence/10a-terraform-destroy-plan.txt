@@ -1,0 +1,28 @@
+Terraform destroy plan evidence
+Captured from the actual recovery lab terminal session.
+
+Terraform identified the following managed resources for destruction:
+
+- azurerm_postgresql_flexible_server.source
+- azurerm_postgresql_flexible_server_database.lab
+- azurerm_postgresql_flexible_server_firewall_rule.current_client
+- azurerm_resource_group.lab
+- random_string.server_suffix
+
+Plan: 0 to add, 0 to change, 5 to destroy.
+
+Relevant configuration observed in the plan:
+
+- PostgreSQL version: 17
+- SKU: B_Standard_B1ms
+- Storage: 32768 MB
+- Backup retention: 7 days
+- Geo-redundant backup: disabled
+- Public network access: enabled
+- Resource group: rg-pg-recovery-lab
+- Database: recoverylab
+- Firewall rule: allow-current-client
+
+Sensitive values such as Subscription ID and client public IP were removed before publication.
+
+This text was copied from the actual Terraform CLI output before cleanup.
