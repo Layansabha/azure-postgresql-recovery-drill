@@ -1,165 +1,124 @@
-﻿# PostgreSQL Recovery Runbook
+# PostgreSQL Recovery Runbook
 
-## Purpose
+This is the sequence tested during the completed lab. It contains a destructive step and should only be used with a disposable environment and an approved cleanup plan.
 
-Recover a known PostgreSQL dataset after a controlled logical data-loss event using Azure Database for PostgreSQL Flexible Server Point-in-Time Restore.
+## 1. Before the incident
 
-This runbook records the procedure that was actually tested in the lab.
+1. Confirm the source Flexible Server reports `Ready`.
+2. Confirm 7-day backup retention and an available restore window.
+3. Run the baseline validator:
 
-## Preconditions
+   ```powershell
+   & psql $sourceConn -X -w -v ON_ERROR_STOP=1 -f "$repo\sql\validation.sql"
+   if ($LASTEXITCODE -ne 0) { throw "Baseline validation failed" }
+   ```
 
-Before any destructive operation:
+4. Record the expected baseline: 10 rows, total 1230.75, IDs 1001-1010.
+5. Select a known-safe UTC restore point later than Azure's earliest restore point.
+6. Persist that restore point before the destructive action.
 
-- Source PostgreSQL Flexible Server is in `Ready` state.
-- Backup retention is 7 days.
-- Azure reports an available full backup.
-- The selected restore timestamp is later than the earliest available restore point.
-- The expected dataset has been recorded.
-- Baseline validation returns PASS.
-- Recovery evidence has been captured.
-- The intended restore timestamp has been fixed before the incident.
+The completed run selected `2026-09-18T22:52:02Z`.
 
-## Expected baseline
+## 2. Controlled incident
 
-Database:
+Run [`sql/incident.sql`](../sql/incident.sql) only after the previous checks:
 
-`recoverylab`
+```powershell
+psql $sourceConn -X -w -v ON_ERROR_STOP=1 -f "$repo\sql\incident.sql"
+```
 
-Table:
+Require evidence that the transaction committed, 10 rows were deleted, and the source row count is 0. Run the validator again and require a non-zero exit status. The completed run returned exit code 3.
 
-`orders`
+Do not reseed or modify the damaged source after the incident.
 
-Expected state:
+## 3. Start PITR
 
-- Row count: 10
-- Total amount: 1230.75
-- Minimum order ID: 1001
-- Maximum order ID: 1010
-- Exact expected dataset comparison: PASS
+Record the recovery start immediately before initiating PITR:
 
-## Tested restore point
+```powershell
+$recoveryStart = [DateTime]::UtcNow.ToString("o")
+$recoveryStart | Set-Content "$repo\evidence\raw\T_recovery_start.txt"
 
-Selected restore timestamp:
+az postgres flexible-server restore `
+  --resource-group $rgName `
+  --name $restoredName `
+  --source-server $serverName `
+  --restore-time $restoreTime `
+  --yes
+```
 
-`2026-09-18T22:52:02Z`
+PITR creates a new Flexible Server. It does not overwrite the source.
 
-Incident timestamp:
+Poll the restored server until it first reports `Ready`, then record that first observation. Do not replace it with a later status-check time.
 
-`2026-09-18T23:08:43.770121Z`
+## 4. Rebuild network access
 
-The restore timestamp was intentionally selected before the destructive event.
+List restored-server firewall rules. The completed run showed that the source rule was not inherited.
 
-## Controlled incident
+Create one rule for the current client IPv4, then verify the rule exists:
 
-The destructive operation is:
+```powershell
+$currentIp = (Invoke-RestMethod -Uri "https://api4.ipify.org").Trim()
 
-    DELETE FROM orders;
+az postgres flexible-server firewall-rule create `
+  --resource-group $rgName `
+  --server-name $restoredName `
+  --name allow-current-client `
+  --start-ip-address $currentIp `
+  --end-ip-address $currentIp
+```
 
-The tested incident produced:
+Test TCP connectivity before attempting data validation:
 
-- rows before deletion: 10
-- rows deleted: 10
-- rows after deletion: 0
-- transaction committed
+```powershell
+Test-NetConnection -ComputerName $restoredFqdn -Port 5432
+```
 
-After the incident:
+## 5. Authenticate and validate
 
-- source row count: 0
-- validation result: FAIL
-- validation process exit code: 3
+Build the restored connection with `sslmode=require`, verify PostgreSQL authentication, and run the same validator:
 
-## Recovery procedure
+```powershell
+$restoredConn = "host=$restoredFqdn port=5432 dbname=$dbName user=$adminUser sslmode=require"
 
-1. Confirm the source data-loss state.
-2. Confirm the previously selected restore timestamp.
-3. Record `T_recovery_start`.
-4. Start Azure PostgreSQL Flexible Server Point-in-Time Restore.
-5. Restore to the selected UTC timestamp.
-6. Wait until the new restored server reports `Ready`.
-7. Record `T_restore_available`.
-8. Confirm that the restored server is a separate server from the damaged source.
-9. List the restored server firewall rules.
-10. Confirm that the source firewall rule was not inherited.
-11. Determine the current client public IPv4.
-12. Create a new firewall rule on the restored server for that IPv4 only.
-13. Verify the restored firewall rule exists.
-14. Verify TCP connectivity to port 5432.
-15. Authenticate to the restored server using `psql`.
-16. Confirm the expected database exists.
-17. Confirm the `orders` table exists.
-18. Run `sql/validation.sql`.
-19. Require validation result PASS and process exit code 0.
-20. Record `T_validation_complete`.
-21. Query the damaged source server.
-22. Confirm the source still contains 0 rows.
-23. Query the restored server.
-24. Confirm the restored server contains 10 rows.
-25. Calculate observed recovery measurements.
-26. Preserve sanitized evidence.
-27. Delete the restored server explicitly.
-28. Verify the restored server is gone.
-29. Run `terraform destroy` for the Terraform-managed source infrastructure.
-30. Verify no unnecessary Azure resources remain.
+psql $restoredConn -X -w -v ON_ERROR_STOP=1 `
+  -c "SELECT current_database(), current_user, version();"
 
-## Restored-server firewall requirement
+& psql $restoredConn -X -w -v ON_ERROR_STOP=1 -f "$repo\sql\validation.sql"
+if ($LASTEXITCODE -ne 0) { throw "Recovered data validation failed" }
+```
 
-The PITR-restored server did not inherit the source Flexible Server firewall rule.
+Record validation completion only after exit code 0. Then compare both servers:
 
-Therefore the tested network recovery sequence was:
+- damaged source: 0 rows,
+- restored server: 10 rows.
 
-Restored server Ready
--> inspect firewall rules
--> create current-client firewall rule
--> verify firewall rule
--> verify TCP 5432
--> authenticate with PostgreSQL
--> validate recovered data
+Azure `Ready` status alone is not the recovery completion criterion.
 
-Database validation must not start before restored-server connectivity is confirmed.
+## 6. Measure
 
-## Validation criteria
+Calculate and retain these separate intervals:
 
-Recovery is considered successful only if all of the following are true:
+- selected restore point to incident,
+- PITR initiation to first `Ready` observation,
+- first `Ready` observation to completed validation,
+- PITR initiation to validated recovery, and
+- incident to validated recovery.
 
-- PostgreSQL authentication succeeds.
-- Database `recoverylab` exists.
-- Table `orders` exists.
-- Row count is exactly 10.
-- Total amount is exactly 1230.75.
-- Minimum order ID is 1001.
-- Maximum order ID is 1010.
-- Exact expected dataset comparison succeeds.
-- Validation process exit code is 0.
+Do not relabel one observed run as a guaranteed RTO or RPO.
 
-Azure reporting the restore operation as complete is not sufficient recovery evidence.
+## 7. Cleanup
 
-## Failure handling
+The restored server is outside the original Terraform state. Cleanup order matters:
 
-If restore, networking, authentication, or validation fails:
+1. Preserve sanitized recovery evidence.
+2. Delete the restored server explicitly.
+3. Confirm a lookup returns `ResourceNotFound`.
+4. Review `terraform plan -destroy`.
+5. Run `terraform destroy` for the five managed objects.
+6. Confirm `terraform state list` is empty.
+7. Confirm the Resource Group does not exist.
+8. Confirm no lab Flexible Servers remain.
+9. Review Azure Cost Management after billing data settles.
 
-- do not modify or reseed the damaged source,
-- preserve the exact error output,
-- inspect the actual Azure resource state,
-- diagnose the failing layer,
-- retry only after the cause is understood.
-
-## Cleanup order
-
-The restored server is created operationally by PITR and is not part of the original Terraform state.
-
-Cleanup order:
-
-1. Preserve final recovery evidence.
-2. Delete the restored PostgreSQL Flexible Server.
-3. Verify the restored server is no longer present.
-4. Verify its associated firewall configuration is gone.
-5. Run `terraform destroy`.
-6. Verify Terraform reports successful destruction.
-7. Verify the Resource Group and billable resources are removed.
-8. Review Azure Cost Management.
-
-## Important limitation
-
-This runbook documents one controlled lab recovery.
-
-It is not a production disaster-recovery procedure and does not define guaranteed RTO or RPO values.
+The completed run finished all checks above. Do not run `apply`, PITR, or `destroy` merely to re-create the published evidence.

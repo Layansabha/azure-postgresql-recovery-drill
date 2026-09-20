@@ -2,85 +2,66 @@
 
 ## Outcome
 
-The controlled PostgreSQL logical data-loss incident was successfully recovered using Azure Database for PostgreSQL Flexible Server Point-in-Time Restore.
+The committed logical deletion was recovered through Azure Database for PostgreSQL Flexible Server Point-in-Time Restore.
 
-The original source server remained in the failed state with 0 rows in the `orders` table.
+PITR created a new server. The damaged source remained at 0 rows while the restored server returned the exact 10-row baseline and passed the same validator that failed against the source.
 
-The restored server returned the expected 10-row baseline and passed the same deterministic validation script that failed against the damaged source.
-
-## Measured timestamps
+## Recorded timestamps
 
 | Event | UTC timestamp |
 |---|---|
-| Selected restore point | 2026-09-18T22:52:02Z |
-| Incident | 2026-09-18T23:08:43.770121Z |
-| Recovery started | 2026-09-18T23:14:04.6896553Z |
-| Restored server first observed Ready | 2026-09-18T23:21:08.4979495Z |
-| Validation completed | 2026-09-18T23:28:09.6732747Z |
+| Selected restore point | `2026-09-18T22:52:02Z` |
+| Incident | `2026-09-18T23:08:43.770121Z` |
+| PITR initiation / recovery start | `2026-09-18T23:14:04.6896553Z` |
+| Restored server first observed `Ready` | `2026-09-18T23:21:08.4979495Z` |
+| Validation complete | `2026-09-18T23:28:09.6732747Z` |
 
-## Observed results
+## Observed measurements
 
-- Selected recovery-point gap: 16.70 minutes
-- Observed time from PITR initiation to restored server Ready: 7.06 minutes
-- Post-Ready networking/connectivity/validation work: 7.02 minutes
-- Observed end-to-end recovery duration: 14.08 minutes
+| Measurement | Observed duration |
+|---|---:|
+| Selected recovery-point gap before incident | 16.70 minutes |
+| PITR initiation to restored server `Ready` | 7.06 minutes |
+| `Ready` to completed data validation | 7.02 minutes |
+| Observed PITR initiation-to-validated-recovery duration | 14.08 minutes |
+| Observed incident-to-validated-recovery elapsed time | approximately 19.43 minutes |
 
-## Validation
+The 14.08-minute value begins when the PITR command was initiated and ends when the restored data passed validation. It is not labeled as RTO.
 
-Damaged source server:
+The 16.70-minute value describes the deliberately selected restore point relative to the incident. It is not labeled as RPO.
 
-- `orders` row count: 0
-- validation result: FAIL
-- validation process exit code: 3
+All values come from one controlled run. They are not Azure service guarantees and are not a statistical performance result.
 
-Restored server:
+## Data validation
 
-- `orders` row count: 10
-- total amount: 1230.75
-- minimum order ID: 1001
-- maximum order ID: 1010
-- validation result: PASS
-- validation process exit code: 0
+| Check | Damaged source | Restored server |
+|---|---:|---:|
+| Row count | 0 | 10 |
+| Total amount | Not applicable | 1230.75 |
+| Minimum order ID | Not applicable | 1001 |
+| Maximum order ID | Not applicable | 1010 |
+| Exact expected row/value mismatches | 10 | 0 |
+| Validator result | FAIL | PASS |
+| Process exit code | 3 | 0 |
 
-## Interpretation
+The restored server was not accepted based on Azure state alone. The tested completion criterion required:
 
-The observed recovery duration is a measurement from one controlled lab run, not a guaranteed RTO or Azure SLA.
-
-The selected recovery point was 16.70 minutes before the incident. This is a deliberately chosen recovery-point gap for the experiment and is not a guaranteed RPO.
-
-The test does not demonstrate multi-region disaster recovery, production scale, enterprise high availability, or guaranteed recovery objectives.
+1. the server to report `Ready`,
+2. the single-client firewall rule to be recreated,
+3. TCP port 5432 to be reachable,
+4. PostgreSQL authentication to succeed, and
+5. `sql/validation.sql` to return PASS with exit code 0.
 
 ## Cleanup verification
 
-After recovery evidence was collected, the temporary Azure resources were removed.
+The restored server was deleted explicitly because it was not in the original Terraform state. The Terraform-managed resources were then destroyed.
 
-Verified cleanup results:
+Observed cleanup checks:
 
-- PITR-restored PostgreSQL Flexible Server deleted.
-- Restored server lookup returned `ResourceNotFound`.
-- Terraform destroy plan showed:
-  - 0 to add
-  - 0 to change
-  - 5 to destroy
-- Terraform state after cleanup was empty.
-- Resource Group existence check returned `false`.
-- Azure PostgreSQL Flexible Server list returned no remaining servers in the subscription.
+- restored-server lookup returned `ResourceNotFound`,
+- destroy plan reported `0 to add, 0 to change, 5 to destroy`,
+- final Terraform state list returned no entries,
+- Resource Group existence check returned `false`, and
+- no lab PostgreSQL Flexible Servers remained.
 
-The lab therefore did not leave the source or restored PostgreSQL servers running after completion.
-
-## Final project status
-
-The tested recovery drill completed the full intended workflow:
-
-Known data
--> controlled destructive event
--> verified data loss
--> Azure Point-in-Time Restore
--> restored-server network recovery
--> programmatic recovery validation
--> measured recovery
--> Azure resource cleanup
-
-Observed end-to-end recovery duration for this lab run: 14.08 minutes.
-
-This remains an observed lab measurement, not a guaranteed RTO or RPO.
+See the [sanitized evidence index](../evidence/README.md).

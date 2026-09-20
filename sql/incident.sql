@@ -1,5 +1,7 @@
 \set ON_ERROR_STOP on
 
+-- DESTRUCTIVE: deletes every row from recoverylab.orders and commits the change.
+-- Run only in the disposable lab after baseline and PITR-readiness checks.
 \echo === CONTROLLED DATA LOSS INCIDENT ===
 
 BEGIN;

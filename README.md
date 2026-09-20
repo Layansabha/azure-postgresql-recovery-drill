@@ -1,126 +1,125 @@
-﻿# Azure PostgreSQL Recovery Drill
+# Azure PostgreSQL Recovery Drill
 
-Controlled data loss -> Point-in-Time Restore -> programmatic validation -> measured recovery.
+Having backups enabled does not prove that usable data can be recovered.
 
-## Engineering problem
+This project tested that assumption by committing a controlled `DELETE` against a known PostgreSQL dataset, restoring Azure Database for PostgreSQL Flexible Server to a pre-incident timestamp, rebuilding access to the new server, and validating the recovered rows with a machine-detectable SQL check.
 
-Having backups enabled does not prove that recovery actually works.
+## Observed lab result
 
-This project performs a controlled logical data-loss incident against Azure Database for PostgreSQL Flexible Server, restores the database to a known point before the incident, restores required network access, validates the recovered data programmatically, and measures the observed recovery.
+- Baseline: 10 orders / validator PASS
+- After committed `DELETE`: 0 orders / validator FAIL / exit code 3
+- Restored server: 10 orders / validator PASS / exit code 0
+- PITR initiation to server `Ready`: 7.06 minutes
+- Observed PITR initiation-to-validated-recovery duration: 14.08 minutes
+- Observed incident-to-validated-recovery elapsed time: approximately 19.43 minutes
+- Selected recovery-point gap before the incident: 16.70 minutes
+- Cleanup: restored server deleted, Terraform state empty, Resource Group absent, and no lab servers remaining
 
-## Tested recovery flow
+These are observations from one controlled lab run. They are not guaranteed RTO/RPO values or Azure service guarantees.
 
-Known 10-row PostgreSQL dataset
--> baseline validation PASS
--> controlled DELETE
--> source database reduced to 0 rows
--> validation FAIL / exit code 3
--> Azure Point-in-Time Restore
--> new restored PostgreSQL Flexible Server
--> restored-server firewall rule recreated
--> TCP and PostgreSQL connectivity verified
--> same deterministic validation script executed
--> validation PASS / exit code 0
--> source remained at 0 rows while restored server contained 10 rows
+## Recovery flow
 
-## Observed result
+```mermaid
+flowchart TD
+    W["Windows workstation: Terraform, Azure CLI, psql"] --> S["Source Flexible Server: orders = 10"]
+    S --> I["Committed DELETE: source = 0"]
+    S --> B["Azure backups and WAL"]
+    B -->|"PITR to selected timestamp"| R["New restored Flexible Server"]
+    R --> N["Recreate firewall rule; test TCP and auth"]
+    N --> V["Run validation.sql: 10 rows / PASS"]
+```
 
-One tested lab run produced:
+Azure PITR created a new Flexible Server. It did not rewind or overwrite the damaged source. This made the final comparison possible: the source remained at 0 rows while the restored server contained the expected 10 rows.
 
-| Metric | Observed result |
-|---|---:|
-| Selected recovery-point gap | 16.70 minutes |
-| PITR initiation to restored server Ready | 7.06 minutes |
-| Ready to validated recovery | 7.02 minutes |
-| End-to-end observed recovery duration | 14.08 minutes |
+## What I tested
 
-These are observations from one controlled lab run.
+1. Provisioned a small Azure PostgreSQL Flexible Server environment with Terraform.
+2. Created and validated a deterministic 10-row `orders` dataset.
+3. Selected and persisted a safe restore timestamp before the incident.
+4. Committed a controlled deletion and proved the damaged state.
+5. Started PITR and recorded the recovery timestamps.
+6. Waited for the new server to report `Ready`.
+7. Recreated network access because the source firewall rule was not inherited.
+8. Verified TCP/5432, PostgreSQL authentication, and the expected database.
+9. Ran the same validator against the restored data.
+10. Compared the damaged source with the restored server and cleaned up all lab resources.
 
-They are not guaranteed RTO/RPO values and are not Azure SLA claims.
+`Ready` was not the recovery completion criterion. Recovery ended only after the restored data passed validation.
 
-## Infrastructure
+## Validation approach
 
-- Azure region: UAE North
-- Azure Database for PostgreSQL Flexible Server
-- PostgreSQL 17
-- Standard_B1ms
-- 32 GiB storage
-- 7-day backup retention
-- High Availability disabled
-- Geo-redundant backup disabled
-- Public network access enabled
-- Firewall restricted to one current client public IPv4
+[`sql/validation.sql`](sql/validation.sql) checks that the table is queryable and reports:
 
-## Recovery dataset
+- `COUNT(*) = 10`
+- `SUM(amount) = 1230.75`
+- `MIN(order_id) = 1001`
+- `MAX(order_id) = 1010`
+- no differences from the exact expected rows and values
 
-Expected `orders` baseline:
+The exact comparison uses both directions of `EXCEPT`. A mismatch raises a PostgreSQL exception; with psql `ON_ERROR_STOP`, that produces a non-zero process exit code. During the incident test, validation failed with exit code 3. After PITR, it passed with exit code 0.
 
-- Row count: 10
-- Total amount: 1230.75
-- Minimum order ID: 1001
-- Maximum order ID: 1010
-- Exact expected dataset comparison required
+## Lab configuration
 
-Before the incident, validation returned PASS.
+| Item | Value |
+|---|---|
+| Azure region | UAE North |
+| Service | Azure Database for PostgreSQL Flexible Server |
+| PostgreSQL | 17 |
+| SKU | `B_Standard_B1ms` / `Standard_B1ms` |
+| Storage | 32 GiB |
+| Backup retention | 7 days |
+| High Availability | Disabled |
+| Geo-redundant backup | Disabled |
+| Network access | Public, restricted to one current-client IPv4 |
+| Database | `recoverylab` |
 
-After the controlled deletion, validation returned FAIL with process exit code 3.
+## Security and cost decisions
 
-After PITR, the same validation returned PASS with process exit code 0.
+Public access was a deliberate lab tradeoff so I could operate the database from my Windows workstation without adding VNet or VM scope. Both servers were restricted to one current-client IPv4; no broad `0.0.0.0` rule was used.
 
-## Important Azure recovery behavior
+PostgreSQL connections used `sslmode=require`, and Azure reported `require_secure_transport = on` with minimum TLS `TLSv1.2`. This encrypted the connection, but `sslmode=require` did not provide the strongest hostname and certificate verification of `verify-full`.
 
-Point-in-Time Restore creates a new PostgreSQL Flexible Server rather than rolling the damaged source server backward.
+Terraform state, saved plans, `.env`, `.local/`, and raw evidence are excluded from Git. The temporary PITR server was deleted before destroying the Terraform-managed source infrastructure to avoid leaving overlapping billable servers running.
 
-The restored server did not inherit the source server firewall rule.
+Details: [security and cost decisions](docs/security-cost.md).
 
-The recovery procedure therefore explicitly:
+## Troubleshooting and lessons learned
 
-1. waited for the restored server to become Ready,
-2. verified the firewall rule was absent,
-3. created a new firewall rule for the current client public IPv4,
-4. verified TCP port 5432 connectivity,
-5. authenticated using `psql`,
-6. ran programmatic data validation.
+- The Terraform workflow used a write-only administrator password argument. After provisioning, the original local credential was unavailable, so I reset the Azure administrator password and stored the replacement locally with Windows DPAPI in the ignored `.local/` directory.
+- An early validator attempt used `\quit 3`, which did not return the intended exit status with the installed psql version. The final validator uses `RAISE EXCEPTION` with `ON_ERROR_STOP`.
+- The first observed `Ready` timestamp was preserved as the availability measurement after a later timestamp accidentally overwrote the local file.
 
-## Repository structure
+Details: [troubleshooting notes](docs/troubleshooting.md).
 
-- `terraform/` - reproducible source infrastructure
-- `sql/` - schema, seed, incident, and validation SQL
-- `scripts/` - supporting automation
-- `docs/` - architecture, runbook, results, security, and cost decisions
-- `evidence/` - sanitized portfolio evidence
+## What this project does not prove
 
-## Security
-
-- PostgreSQL credentials are not committed to Git.
-- Terraform state is not committed.
-- Saved Terraform plans are not committed.
-- Raw evidence is excluded from Git.
-- Public access is restricted to a single client IPv4.
-- `require_secure_transport` was observed as `on`.
-- Minimum TLS protocol was observed as `TLSv1.2`.
-
-See `docs/security-cost.md`.
-
-## Recovery runbook
-
-See `docs/recovery-runbook.md`.
-
-## Measured results
-
-See `docs/results.md`.
-
-## What this project does NOT prove
-
-This project does not demonstrate:
+This lab does not prove:
 
 - multi-region disaster recovery
 - enterprise High Availability
-- production-scale PostgreSQL
-- automatic application failover
-- guaranteed RTO
-- guaranteed RPO
-- Azure SLA compliance
-- production-grade private networking
+- automated failover
+- production-scale workload recovery
+- guaranteed RTO or RPO
+- private-network-only architecture
+- repeated statistical recovery performance
 
-It demonstrates one tested Azure PostgreSQL logical-data-loss recovery workflow with measured recovery and programmatic validation.
+It is one tested logical-data-loss recovery drill.
+
+## Repository guide
+
+- [`terraform/`](terraform/) - source infrastructure used by the lab
+- [`sql/`](sql/) - schema, deterministic seed, controlled incident, and validator
+- [`docs/architecture.md`](docs/architecture.md) - component and resource-ownership detail
+- [`docs/recovery-runbook.md`](docs/recovery-runbook.md) - tested operational sequence
+- [`docs/results.md`](docs/results.md) - timestamps, measurements, and interpretation
+- [`docs/security-cost.md`](docs/security-cost.md) - security and cost tradeoffs
+- [`docs/troubleshooting.md`](docs/troubleshooting.md) - problems encountered and fixes
+- [`evidence/README.md`](evidence/README.md) - index of sanitized evidence records
+
+## Reproducing the lab
+
+Read the [recovery runbook](docs/recovery-runbook.md) before executing anything. The runbook includes a committed destructive statement and creates paid Azure resources.
+
+Use your own globally unique server name, current public IPv4, and administrator credential. Review `terraform plan` before `apply`, select the restore point before running the incident, and delete the out-of-band restored server before `terraform destroy`.
+
+The measured timings above belong to the completed September 2026 run. A repeat run will produce different resource names, timestamps, and recovery durations.

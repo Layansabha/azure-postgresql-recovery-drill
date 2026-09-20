@@ -1,149 +1,77 @@
-﻿# Security and Cost Decisions
+# Security and Cost Decisions
 
-## Security approach
+## Public network access
 
-The project uses security controls appropriate for a short-lived learning lab while documenting where production architecture would differ.
+The lab used public access so PostgreSQL could be operated directly from a Windows workstation. This kept the experiment focused on recovery and avoided adding a VNet, VM, NAT Gateway, or private endpoint.
 
-## Network access
+The tradeoff was controlled by using:
 
-The PostgreSQL Flexible Servers use public network access.
+- one current-client IPv4 firewall rule on the source server,
+- one current-client IPv4 firewall rule recreated on the restored server,
+- identical start and end IP addresses, and
+- no broad `0.0.0.0` access rule.
 
-This was selected because the PostgreSQL client runs directly from a local Windows workstation and the goal of the project is recovery testing rather than private-network architecture.
-
-Access was restricted using a server-level firewall rule with:
-
-- one current client public IPv4,
-- identical start and end IP addresses,
-- no broad client range,
-- no unrestricted Azure-wide firewall rule.
-
-The restored PITR server required its own firewall rule because the source firewall rule was not inherited.
-
-For sensitive production systems, private networking would normally be preferred.
+Private networking would be more appropriate for many production environments. It was outside this lab's scope.
 
 ## TLS
 
-Observed on both source and restored servers:
+Both source and restored servers were observed with:
 
 - `require_secure_transport = on`
 - `ssl_min_protocol_version = TLSv1.2`
 
-The PostgreSQL client connection used:
+The psql connection string used `sslmode=require`. This required an encrypted connection, but it did not provide the strongest hostname and server-certificate verification. The lab did not implement or claim `verify-full`.
 
-`sslmode=require`
+## Administrator credential handling
 
-The project therefore verifies encrypted transport.
+The Terraform configuration used `administrator_password_wo`, a write-only password argument. That avoided retaining the administrator password as a normal Terraform value, but it did not solve the local credential lifecycle.
 
-It does not claim to be a PKI-hardening or certificate-lifecycle implementation.
-
-## PostgreSQL credentials
-
-The administrator password is not stored in Git.
-
-During the lab it was stored locally using Windows DPAPI under:
+During the completed run, the original locally available password was no longer available after provisioning. The administrator password was reset through Azure, then the replacement was stored locally with Windows DPAPI at:
 
 `.local/pg-admin-password.dpapi`
 
-The `.local/` directory is excluded from Git.
+The `.local/` directory was ignored by Git. No credential value is present in the repository or public evidence.
 
-The password itself is not printed in project documentation or evidence.
+For a repeat run, the credential should be generated or captured once in an approved secret manager or protected local workflow before `terraform apply`, then made available to both Terraform and the PostgreSQL client without printing it. This lesson is operational, not an architectural feature of the lab.
 
-## Terraform state
-
-Terraform state is treated as sensitive operational data.
+## Terraform and local artifacts
 
 The repository excludes:
 
-- `*.tfstate`
-- `*.tfstate.*`
-- `tfplan`
+- `*.tfstate` and `*.tfstate.*`
 - `.terraform/`
+- `*.tfplan` and `tfplan`
+- `.env` and `.env.*`
 - `.local/`
 - `evidence/raw/`
-- `.env`
 
-The committed `.terraform.lock.hcl` is intentionally retained because it records Terraform provider selections and checksums.
+The provider lock file is committed because it records provider versions and checksums; it does not contain the administrator password.
 
 ## Evidence handling
 
-Raw command output may contain:
+Raw output stayed in the ignored `evidence/raw/` directory because it could contain subscription IDs, tenant IDs, email addresses, public IP addresses, Azure resource IDs, and local paths.
 
-- Subscription IDs
-- Tenant IDs
-- email addresses
-- public IPv4 addresses
-- Azure resource identifiers
-- local filesystem information
+Published evidence is sanitized and labeled as either a transcript excerpt or a summary. The repository does not claim that a reformatted summary is verbatim terminal output.
 
-Raw evidence remains under `evidence/raw/` and is excluded from Git.
+## Cost choices
 
-Only sanitized evidence should be published.
+The source used a small lab configuration:
 
-## Cost controls
-
-Before deployment:
-
-- Azure Free Account credit was confirmed.
-- USD 200 promotional credit was visible.
-- A USD 5 monthly Azure Budget was created.
-- Budget alerts were treated as notifications, not as a hard spending cap.
-
-The lab was intentionally kept small.
-
-Source server configuration:
-
-- Standard_B1ms
+- `Standard_B1ms`
 - 32 GiB storage
 - 7-day backup retention
 - High Availability disabled
-- Geo-redundant backup disabled
-- Storage autogrow disabled
+- geo-redundant backup disabled
+- storage autogrow disabled
 
-The lab does not use:
+A USD 5 Azure Budget was configured as a notification guardrail. It was not treated as a spending cap.
 
-- Azure VM
-- AKS
-- NAT Gateway
-- multi-region deployment
-- additional observability stack
-- enterprise HA
+PITR temporarily created a second billable server. Cleanup therefore removed the restored server first, then destroyed the Terraform-managed source infrastructure and verified that no lab servers remained.
 
-## Observed pricing information
+The project does not claim an exact final cost or a permanently free architecture.
 
-During planning, the Azure Retail Prices API returned approximately:
+## References
 
-- UAE North B1ms compute: USD 0.020 per hour
-- UAE North backup-storage overage meter: USD 0.105 per GB-month
-
-An exact UAE North primary-storage retail meter was not successfully retrieved during the experiment, so this project does not claim an exact final storage rate.
-
-Actual final cost must be reviewed in Azure Cost Management because billing data can be delayed.
-
-## PITR cost risk
-
-Point-in-Time Restore creates another PostgreSQL Flexible Server.
-
-For part of the recovery drill, both the damaged source server and restored server exist simultaneously.
-
-This increases temporary resource consumption.
-
-Therefore the restored server must be explicitly deleted immediately after recovery evidence is complete.
-
-## Cost cleanup
-
-The cleanup procedure is:
-
-1. Delete the PITR-restored server.
-2. Verify the restored server no longer exists.
-3. Run `terraform destroy`.
-4. Verify the source Flexible Server is gone.
-5. Verify the Resource Group no longer contains unnecessary resources.
-6. Review Azure Cost Management after cleanup.
-
-## Cost claim limitation
-
-The project does not claim that Azure PostgreSQL is universally free.
-
-Any free allowance or promotional credit depends on the actual subscription and applicable Azure offer.
-
-The configuration was selected to minimize lab cost, not to prove a permanent zero-cost architecture.
+- [Microsoft Learn: Backup and restore in Azure Database for PostgreSQL Flexible Server](https://learn.microsoft.com/en-us/azure/postgresql/backup-restore/concepts-backup-restore)
+- [Microsoft Learn: TLS in Azure Database for PostgreSQL Flexible Server](https://learn.microsoft.com/en-us/azure/postgresql/security/security-tls)
+- [PostgreSQL: SSL support and sslmode behavior](https://www.postgresql.org/docs/current/libpq-ssl.html)
