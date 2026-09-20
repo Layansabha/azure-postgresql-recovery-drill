@@ -58,6 +58,22 @@ Azure PITR created a new Flexible Server. It did not rewind or overwrite the dam
 
 The exact comparison uses both directions of `EXCEPT`. A mismatch raises a PostgreSQL exception; with psql `ON_ERROR_STOP`, that produces a non-zero process exit code. During the incident test, validation failed with exit code 3. After PITR, it passed with exit code 0.
 
+## Evidence highlights
+
+Controlled deletion committed: 10 rows became 0.
+
+![Controlled DELETE committed](evidence/screenshots/01-controlled-delete.jpeg)
+
+The damaged source failed deterministic validation.
+
+![Post-incident validation failure](evidence/screenshots/02-post-incident-validation-fail.jpeg)
+
+The restored data matched the expected 10-row baseline.
+
+![Recovered data validation passed](evidence/screenshots/06-recovery-validation-pass.jpeg)
+
+Additional sanitized screenshots and text records are indexed under [`evidence/`](evidence/README.md).
+
 ## Lab configuration
 
 | Item | Value |
