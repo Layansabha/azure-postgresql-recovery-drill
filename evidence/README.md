@@ -1,52 +1,18 @@
-﻿# Evidence
+# Sanitized Evidence Index
 
-This directory is for sanitized evidence suitable for a public portfolio.
+These files record the major milestones from the completed September 2026 recovery drill.
 
-Raw command output remains under `evidence/raw/` and is excluded from Git.
+The records were transcribed from the sanitized Study Guide after the lab. They preserve observed commands, values, and results, but they are not presented as untouched terminal log files. Raw captures remain excluded under `evidence/raw/` because they can contain subscription IDs, public IP addresses, resource IDs, email addresses, and local paths.
 
-## Evidence checklist
+| Evidence | What it supports |
+|---|---|
+| [01 - Terraform plan](01-terraform-plan.txt) | Tool/provider versions and initial `5 to add` plan |
+| [02 - Baseline validation](02-baseline-validation.txt) | Deterministic 10-row baseline and validator PASS |
+| [03 - Controlled incident](03-controlled-incident.txt) | Committed deletion, 0-row source, validator FAIL / exit 3 |
+| [04 - PITR and network recovery](04-pitr-network-recovery.txt) | New server, first `Ready` observation, firewall rebuild, TCP test |
+| [05 - Recovered data validation](05-recovery-validation.txt) | Restored validator PASS / exit 0 and source-versus-restored proof |
+| [06 - Recovery measurements](06-recovery-measurements.txt) | Recorded UTC timestamps and calculated durations |
+| [10a - Terraform destroy plan](10a-terraform-destroy-plan.txt) | Sanitized destroy-plan summary: `5 to destroy` |
+| [10b - Cleanup verification](10b-cleanup-verification.txt) | Empty state, absent Resource Group, no lab servers |
 
-Recommended evidence from the tested drill:
-
-1. Azure Budget configuration.
-2. Terraform plan summary.
-3. Terraform apply success.
-4. Source PostgreSQL Flexible Server configuration.
-5. Source firewall configuration.
-6. Initial 10-row dataset.
-7. Baseline validation PASS.
-8. PITR readiness summary.
-9. Selected restore timestamp.
-10. Controlled destructive incident.
-11. Rows before deletion: 10.
-12. Rows deleted: 10.
-13. Rows after deletion: 0.
-14. Post-incident validation FAIL.
-15. Post-incident validation exit code 3.
-16. PITR initiation.
-17. Restored server Ready.
-18. Restored firewall initially absent.
-19. Restored firewall explicitly created.
-20. Restored TCP 5432 connectivity successful.
-21. Restored 10-row dataset.
-22. Recovery validation PASS.
-23. Recovery validation exit code 0.
-24. Source row count 0 versus restored row count 10.
-25. Recovery timing summary.
-26. Terraform destroy success.
-27. Final Azure cleanup verification.
-
-## Sanitize before publishing
-
-Remove or obscure:
-
-- Subscription IDs
-- Tenant IDs
-- email addresses
-- access tokens
-- passwords
-- public IPv4 addresses
-- sensitive Terraform state
-- unnecessary local filesystem information
-
-Do not commit the contents of `evidence/raw/`.
+No screenshots were manufactured for publication. Text evidence is used where no sanitized screenshot was captured.

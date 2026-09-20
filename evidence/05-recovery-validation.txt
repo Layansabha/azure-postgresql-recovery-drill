@@ -1,0 +1,23 @@
+SANITIZED EVIDENCE RECORD
+Source: observed output transcribed from the completed lab Study Guide.
+This is not an untouched terminal log.
+
+Restored PostgreSQL authentication
+current_database = recoverylab
+current_user     = pgrecoveryadmin
+PostgreSQL       = 17.11
+
+Restored data validation
+row_count    = 10
+total_amount = 1230.75
+min_order_id = 1001
+max_order_id = 1010
+exact expected row/value comparison = PASS
+VALIDATION PASS
+Recovery validation exit code: 0
+
+Final comparison
+SOURCE SERVER:   0 rows
+RESTORED SERVER: 10 rows
+
+T_validation_complete = 2026-09-18T23:28:09.6732747Z

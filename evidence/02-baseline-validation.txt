@@ -1,0 +1,22 @@
+SANITIZED EVIDENCE RECORD
+Source: observed output transcribed from the completed lab Study Guide.
+This is not an untouched terminal log.
+
+Database: recoverylab
+Table: orders
+
+Seed result
+INSERT 0 10
+
+Baseline validation
+row_count    = 10
+total_amount = 1230.75
+min_order_id = 1001
+max_order_id = 1010
+exact expected row/value comparison = PASS
+VALIDATION PASS
+
+Recorded timestamps
+T_seed_complete       = 2026-09-18T22:51:58.6699157Z
+T_baseline_verified   = 2026-09-18T22:52:00.7251821Z
+Selected restore point = 2026-09-18T22:52:02Z

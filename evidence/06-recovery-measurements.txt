@@ -1,0 +1,19 @@
+SANITIZED EVIDENCE RECORD
+Source: recorded timestamps and calculations from the completed lab Study Guide.
+This is not an untouched terminal log.
+
+UTC timestamps
+- Selected restore point: 2026-09-18T22:52:02Z
+- Incident: 2026-09-18T23:08:43.770121Z
+- PITR initiation / recovery start: 2026-09-18T23:14:04.6896553Z
+- Restored server first observed Ready: 2026-09-18T23:21:08.4979495Z
+- Validation complete: 2026-09-18T23:28:09.6732747Z
+
+Calculated observations
+- Selected recovery-point gap before incident: 16.70 minutes
+- PITR initiation to first Ready observation: 7.06 minutes
+- First Ready observation to completed validation: 7.02 minutes
+- Observed PITR initiation-to-validated-recovery duration: 14.08 minutes
+- Observed incident-to-validated-recovery elapsed time: approximately 19.43 minutes
+
+These values describe one controlled run. They are not guaranteed RTO/RPO values or Azure service guarantees.

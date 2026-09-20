@@ -1,7 +1,8 @@
-Terraform destroy plan evidence
-Captured from the actual recovery lab terminal session.
+SANITIZED EVIDENCE SUMMARY
+Source: values transcribed from the actual destroy plan recorded in the completed lab Study Guide.
+This is a structured summary, not a verbatim Terraform CLI capture.
 
-Terraform identified the following managed resources for destruction:
+Terraform identified five managed objects for destruction:
 
 - azurerm_postgresql_flexible_server.source
 - azurerm_postgresql_flexible_server_database.lab
@@ -9,20 +10,18 @@ Terraform identified the following managed resources for destruction:
 - azurerm_resource_group.lab
 - random_string.server_suffix
 
+Observed plan summary
 Plan: 0 to add, 0 to change, 5 to destroy.
 
-Relevant configuration observed in the plan:
-
+Associated lab configuration recorded with the plan
 - PostgreSQL version: 17
 - SKU: B_Standard_B1ms
 - Storage: 32768 MB
 - Backup retention: 7 days
 - Geo-redundant backup: disabled
 - Public network access: enabled
-- Resource group: rg-pg-recovery-lab
+- Resource Group: rg-pg-recovery-lab
 - Database: recoverylab
 - Firewall rule: allow-current-client
 
-Sensitive values such as Subscription ID and client public IP were removed before publication.
-
-This text was copied from the actual Terraform CLI output before cleanup.
+Subscription ID, resource IDs, client public IP, and any sensitive values are omitted.

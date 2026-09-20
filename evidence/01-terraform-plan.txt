@@ -1,0 +1,23 @@
+SANITIZED EVIDENCE RECORD
+Source: values and observed output transcribed from the completed lab Study Guide.
+This is not an untouched terminal log.
+
+Lab tooling
+- Terraform: 1.16.3
+- AzureRM constraint: ~> 5.6.0
+- AzureRM selected version: 5.6.0
+- random constraint: ~> 3.9.0
+- random selected version: 3.9.1
+
+Observed validation and plan result
+Success! The configuration is valid.
+Plan: 5 to add, 0 to change, 0 to destroy.
+
+Planned objects
+- random_string.server_suffix
+- azurerm_resource_group.lab
+- azurerm_postgresql_flexible_server.source
+- azurerm_postgresql_flexible_server_database.lab
+- azurerm_postgresql_flexible_server_firewall_rule.current_client
+
+No subscription ID, credential, client public IP, state file, or saved plan is included.

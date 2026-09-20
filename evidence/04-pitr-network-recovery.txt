@@ -1,0 +1,26 @@
+SANITIZED EVIDENCE RECORD
+Source: observed commands and output transcribed from the completed lab Study Guide.
+This is not an untouched terminal log.
+
+Selected restore point
+2026-09-18T22:52:02Z
+
+PITR behavior
+- Azure created a new PostgreSQL Flexible Server.
+- The damaged source server was not overwritten.
+- Restored server first observed state: Ready
+- PostgreSQL: 17
+- SKU: Standard_B1ms
+- Storage: 32 GiB
+
+Recorded times
+T_recovery_start   = 2026-09-18T23:14:04.6896553Z
+T_restore_available = 2026-09-18T23:21:08.4979495Z
+
+Restored-server networking
+- Initial firewall-rule list: no rules listed
+- Recreated rule: allow-current-client
+- Start/end address: same current-client IPv4 [REDACTED]
+- TcpTestSucceeded: True
+
+The restored server name, FQDN, public IP, subscription ID, and resource IDs are omitted.

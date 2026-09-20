@@ -1,0 +1,21 @@
+SANITIZED EVIDENCE RECORD
+Source: observed output transcribed from the completed lab Study Guide.
+This is not an untouched terminal log.
+
+Script: sql/incident.sql
+
+incident_timestamp_utc = 2026-09-18 23:08:43.770121
+rows_before_delete     = 10
+DELETE 10
+rows_after_delete      = 0
+COMMIT
+
+Post-incident source check
+current_row_count = 0
+
+Validator result
+ERROR: VALIDATION FAIL: expected exact 10-row baseline; actual_count=0, mismatches=10
+Validation process exit code: 3
+
+Normalized incident timestamp
+2026-09-18T23:08:43.770121Z

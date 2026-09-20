@@ -1,0 +1,22 @@
+SANITIZED EVIDENCE RECORD
+Source: observed output transcribed from the completed lab Study Guide.
+This is not an untouched terminal log.
+
+Restored server cleanup
+- Explicit delete completed.
+- Follow-up lookup result: ResourceNotFound
+
+Terraform-managed cleanup
+- Destroy plan: 0 to add, 0 to change, 5 to destroy
+- terraform destroy: completed
+- terraform state list: no output
+
+Azure verification
+- az group exists --name rg-pg-recovery-lab: false
+- Flexible Server list: no remaining lab servers
+
+Final state
+- restored server absent
+- source server absent
+- Resource Group absent
+- Terraform state empty
