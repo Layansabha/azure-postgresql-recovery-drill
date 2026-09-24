@@ -15,7 +15,7 @@ I built this lab to test the full recovery path, not just confirm that backups w
 - Selected recovery-point gap before the incident: 16.70 minutes
 - Cleanup: restored server deleted, Terraform state empty, Resource Group absent, and no lab servers remaining
 
-These are observations from one controlled lab run. They are not guaranteed RTO/RPO values or Azure service guarantees.
+No target RTO or RPO was defined for this lab. These are observed recovery measurements from one controlled run, not Azure service guarantees.
 
 ## Recovery flow
 
